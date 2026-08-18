@@ -14,7 +14,7 @@ jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
     needs: [runner-config]
-    runs-on: ${{ matrix.runs-on || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.language == 'go' && needs.runner-config.outputs.go-runner || 'ubuntu-latest' }}
     permissions:
       # required for all workflows
       security-events: write
@@ -24,23 +24,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - language: actions
-            build-mode: none
-
-          - language: go
-            build-mode: manual
-            runs-on: ${{ needs.runner-config.outputs.go-runner }}
-
-          - language: javascript-typescript
-            build-mode: none
-            codeql-config: |
-              paths-ignore:
-                - 'core/web/assets'
-                - '**/node_modules/**'
-
-          - language: python
-            build-mode: none
+        # Go analysis requires SmartContractKit's high-capacity runner. Keep the
+        # GitHub-hosted language scans enabled in forks without leaving Go queued.
+        language: ${{ fromJSON(github.repository == 'smartcontractkit/chainlink' && '["actions","go","javascript-typescript","python"]' || '["actions","javascript-typescript","python"]') }}
     steps:
       - name: Enable S3 Cache for Self-Hosted Runners
         uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc # v2.2.0
@@ -63,17 +49,28 @@ jobs:
 
       # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL
+        if: matrix.language != 'javascript-typescript'
         uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
-          build-mode: ${{ matrix.build-mode }}
-          config: ${{ matrix.codeql-config || '' }}
+          build-mode: ${{ matrix.language == 'go' && 'manual' || 'none' }}
           # If you wish to specify custom queries, you can do so here or in a config file.
           # By default, queries listed here will override any specified in a config file.
           # Prefix the list here with "+" to use these queries and those in the config file.
 
           # For more details on CodeQL's query packs, refer to: https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/configuring-code-scanning#using-queries-in-ql-packs
           # queries: security-extended,security-and-quality
+
+      - name: Initialize CodeQL for JavaScript
+        if: matrix.language == 'javascript-typescript'
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          config: |
+            paths-ignore:
+              - 'core/web/assets'
+              - '**/node_modules/**'
 
       - name: Build go code manually
         if: matrix.language == 'go'

@@ -131,7 +131,7 @@ jobs:
       matrix:
         shard-id: [1, 2, 3, 4, 5, 6, 7]
     name: Deployment Tests (go_deployment_tests shard ${{ matrix.shard-id }}/${{ strategy.job-total }})
-    if: ${{ github.actor != 'dependabot[bot]' && needs.filter.outputs.should-run == 'true' }}
+    if: ${{ github.repository == 'smartcontractkit/chainlink' && github.actor != 'dependabot[bot]' && needs.filter.outputs.should-run == 'true' }}
     needs: [filter]
     timeout-minutes: 35
     runs-on: "runs-on=${{ github.run_id }}-deployment-${{ matrix.shard-id }}/cpu=8/ram=32/family=m6id+m8id/spot=co/image=ubuntu24-full-x64/extras=s3-cache"
