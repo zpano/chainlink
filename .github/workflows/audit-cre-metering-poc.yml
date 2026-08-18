@@ -1,0 +1,31 @@
+name: Audit CRE Metering PoC
+
+on:
+  push:
+    branches:
+      - audit-cre-metering-concurrency-v259
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  poc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Run deterministic PoC
+        run: >-
+          go test ./core/services/workflows/v2
+          -run '^TestPoC_MeteringFailsOpenAtSharedCapabilityConcurrencyLimit$'
+          -count=1
+          -v
