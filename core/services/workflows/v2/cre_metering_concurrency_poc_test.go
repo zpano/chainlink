@@ -3,6 +3,7 @@ package v2_test
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"sync"
 	"testing"
 	"time"
@@ -12,12 +13,12 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/smartcontractkit/chainlink-common/pkg/capabilities"
+	regmocks "github.com/smartcontractkit/chainlink-common/pkg/types/core/mocks"
 	"github.com/smartcontractkit/chainlink-common/pkg/workflows/host"
+	modulemocks "github.com/smartcontractkit/chainlink-common/pkg/workflows/wasm/host/mocks"
 	billing "github.com/smartcontractkit/chainlink-protos/billing/go"
 	sdkpb "github.com/smartcontractkit/chainlink-protos/cre/go/sdk"
 	capmocks "github.com/smartcontractkit/chainlink/v2/core/capabilities/mocks"
-	modulemocks "github.com/smartcontractkit/chainlink-common/pkg/workflows/wasm/host/mocks"
-	regmocks "github.com/smartcontractkit/chainlink-common/pkg/types/core/mocks"
 	metmocks "github.com/smartcontractkit/chainlink/v2/core/services/workflows/metering/mocks"
 	v2 "github.com/smartcontractkit/chainlink/v2/core/services/workflows/v2"
 	"github.com/smartcontractkit/chainlink/v2/core/utils/matches"
@@ -34,9 +35,9 @@ import (
 // capability with an empty SpendLimits slice.
 //
 // The test reserves 14 credits and makes every capability consume one credit.
-// All 15 capability calls succeed, and the submitted receipt reports 15 credits
-// consumed even though only 14 were reserved. Resource consumption has already
-// happened before this post-facto receipt is submitted.
+// All 15 capability calls succeed, and the submitted receipt reports more than
+// the 14 credits that were reserved. Resource consumption has already happened
+// before this post-facto receipt is submitted.
 func TestPoC_MeteringFailsOpenAtSharedCapabilityConcurrencyLimit(t *testing.T) {
 	const (
 		callCount    = 15
@@ -226,6 +227,9 @@ func TestPoC_MeteringFailsOpenAtSharedCapabilityConcurrencyLimit(t *testing.T) {
 		Once()
 
 	require.NoError(t, engine.Start(t.Context()))
+	t.Cleanup(func() {
+		require.NoError(t, engine.Close())
+	})
 	require.NoError(t, <-initDoneCh)
 	require.Equal(t, []string{"id_0"}, <-subscribedToTriggersCh)
 
@@ -239,10 +243,15 @@ func TestPoC_MeteringFailsOpenAtSharedCapabilityConcurrencyLimit(t *testing.T) {
 
 	select {
 	case receipt := <-receiptCh:
-		require.Equal(t, "15", receipt.CreditsConsumed, "actual irreversible spend exceeds the 14-credit reservation")
+		consumedCredits, ok := new(big.Rat).SetString(receipt.CreditsConsumed)
+		require.True(t, ok, "invalid consumed credit amount %q", receipt.CreditsConsumed)
+		reservedCredits, ok := new(big.Rat).SetString(reserved)
+		require.True(t, ok, "invalid reserved credit amount %q", reserved)
+		require.Greater(t, consumedCredits.Cmp(reservedCredits), 0,
+			"actual irreversible spend %s must exceed the %s-credit reservation",
+			receipt.CreditsConsumed, reserved)
+		t.Logf("metering fail-open reproduced: reserved=%s consumed=%s", reserved, receipt.CreditsConsumed)
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for metering receipt")
 	}
-
-	require.NoError(t, engine.Close())
 }

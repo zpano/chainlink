@@ -7,6 +7,8 @@ env:
 
 jobs:
   check-gql:
+    # Forks do not have the AWS/GATI credentials used to access operator-ui.
+    if: github.repository == 'smartcontractkit/chainlink'
     permissions:
       id-token: write
       contents: read
