@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - audit-cre-metering-concurrency-v259
+  pull_request:
+    branches:
+      - audit-base-v2.59.0
+    paths:
+      - core/services/workflows/v2/cre_metering_concurrency_poc_test.go
+      - .github/workflows/audit-cre-metering-poc.yml
   workflow_dispatch:
 
 permissions:
