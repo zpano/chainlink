@@ -229,7 +229,7 @@ jobs:
   deployment-tests-result:
     # Do not modify this job name, it is used by branch protection rules
     name: Core Tests (go_core_deployment_tests)
-    if: ${{ always() && github.actor != 'dependabot[bot]' && needs.filter.outputs.should-run == 'true' }}
+    if: ${{ always() && github.repository == 'smartcontractkit/chainlink' && github.actor != 'dependabot[bot]' && needs.filter.outputs.should-run == 'true' }}
     needs: [filter, deployment-tests]
     runs-on: ubuntu-latest
     permissions:
