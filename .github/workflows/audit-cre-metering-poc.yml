@@ -9,6 +9,7 @@ on:
       - audit-base-v2.59.0
     paths:
       - core/services/workflows/v2/cre_metering_concurrency_poc_test.go
+      - core/services/workflows/v2/cre_evm_write_report_overspend_poc_test.go
       - .github/workflows/audit-cre-metering-poc.yml
   workflow_dispatch:
 
@@ -29,9 +30,9 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      - name: Run deterministic PoC
+      - name: Run deterministic PoCs
         run: >-
           go test ./core/services/workflows/v2
-          -run '^TestPoC_MeteringFailsOpenAtSharedCapabilityConcurrencyLimit$'
+          -run '^TestPoC_'
           -count=1
           -v
