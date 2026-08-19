@@ -1,0 +1,36 @@
+name: Audit CRE Real EVM Capability PoC
+
+on:
+  push:
+    branches:
+      - audit-cre-real-evm-capability-20260819
+  pull_request:
+    branches:
+      - audit-cre-real-evm-base-20260819
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  poc:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout latest-main audit branch
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Pin official capabilities EVM implementation
+        run: go get github.com/smartcontractkit/capabilities/chain_capabilities/evm@37945e9e0fa41f14eaac47ad457cd6270b0ef0bf
+
+      - name: Run cross-repository production-path PoC
+        run: >-
+          go test ./core/services/workflows/v2
+          -run '^TestPoC_RealGeneratedEVMWriteReportExceedsReservation$'
+          -count=1 -v

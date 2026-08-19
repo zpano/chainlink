@@ -20,6 +20,8 @@ concurrency:
 
 jobs:
   cora:
+    # The reusable workflow exchanges upstream-only AWS credentials for a token.
+    if: github.repository == 'smartcontractkit/chainlink'
     uses: smartcontractkit/.github/.github/workflows/reusable-codeowners-review-analysis.yml@5166e93aa65a984743a1e1116e8b44db25fb2b9d # 2025-11-19
     permissions:
       actions: read # needed to pull actions run url
