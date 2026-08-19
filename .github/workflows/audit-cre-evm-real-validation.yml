@@ -1,0 +1,139 @@
+name: Audit CRE Real EVM Validation
+
+on:
+  push:
+    branches:
+      - audit-cre-evm-real-validation
+  pull_request:
+    branches:
+      - audit-cre-evm-real-base
+    paths:
+      - audit/cre_evm_real_tx_poc_test.go
+      - audit/cre_evm_real_forwarder_poc_test.go
+      - core/services/workflows/v2/cre_evm_write_report_overspend_poc_test.go
+      - core/services/workflows/v2/cre_evm_write_report_amplification_poc_test.go
+      - .github/workflows/audit-cre-evm-real-validation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  latest-engine:
+    name: Latest Chainlink engine settlement
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout latest-develop audit branch
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Run latest-engine EVM overspend PoCs
+        run: >-
+          go test ./core/services/workflows/v2
+          -run '^TestPoC_EVMWriteReport'
+          -count=1
+          -v
+
+  real-evm-action:
+    name: Production EVM WriteReport with mined transactions
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout audit fixture
+        uses: actions/checkout@v4
+        with:
+          path: chainlink-audit
+
+      - name: Checkout official capabilities source
+        uses: actions/checkout@v4
+        with:
+          repository: smartcontractkit/capabilities
+          ref: 37945e9e0fa41f14eaac47ad457cd6270b0ef0bf
+          path: capabilities
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: capabilities/chain_capabilities/evm/go.mod
+          cache: false
+
+      - name: Compile audit ERC165 receiver
+        shell: bash
+        run: |
+          cat > /tmp/AuditReceiver.sol <<'SOL'
+          // SPDX-License-Identifier: MIT
+          pragma solidity 0.8.24;
+
+          interface IERC165 {
+            function supportsInterface(bytes4 interfaceId) external view returns (bool);
+          }
+
+          interface IReceiver is IERC165 {
+            function onReport(bytes calldata metadata, bytes calldata report) external;
+          }
+
+          contract AuditReceiver is IReceiver {
+            uint256 public counter;
+            bytes32 public lastReportHash;
+
+            function onReport(bytes calldata metadata, bytes calldata report) external {
+              counter += 1;
+              lastReportHash = keccak256(bytes.concat(metadata, report));
+            }
+
+            function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
+              return interfaceId == type(IReceiver).interfaceId || interfaceId == type(IERC165).interfaceId;
+            }
+          }
+          SOL
+          rm -rf /tmp/audit-receiver-build
+          mkdir -p /tmp/audit-receiver-build
+          npx --yes solc@0.8.24 --bin --abi \
+            --output-dir /tmp/audit-receiver-build \
+            /tmp/AuditReceiver.sol
+          receiver_bin=$(find /tmp/audit-receiver-build -type f -name '*AuditReceiver.bin' -print -quit)
+          test -n "$receiver_bin"
+          test -s "$receiver_bin"
+          echo "AUDIT_RECEIVER_BIN=$(tr -d '\r\n' < "$receiver_bin")" >> "$GITHUB_ENV"
+
+      - name: Inject audit-only integration tests
+        shell: bash
+        run: |
+          cp chainlink-audit/audit/cre_evm_real_tx_poc_test.go \
+            capabilities/chain_capabilities/evm/actions/cre_evm_real_tx_poc_test.go
+          cp chainlink-audit/audit/cre_evm_real_forwarder_poc_test.go \
+            capabilities/chain_capabilities/evm/actions/cre_evm_real_forwarder_poc_test.go
+          gofmt -w \
+            capabilities/chain_capabilities/evm/actions/cre_evm_real_tx_poc_test.go \
+            capabilities/chain_capabilities/evm/actions/cre_evm_real_forwarder_poc_test.go
+
+      - name: Run production WriteReport against simulated EVM and real forwarder
+        working-directory: capabilities/chain_capabilities/evm
+        run: >-
+          go test ./actions
+          -run '^TestPoC_Real'
+          -count=1
+          -v
+
+      - name: Confirm generated EVM wrapper advertises no spend types
+        working-directory: capabilities/chain_capabilities/evm
+        shell: bash
+        run: |
+          module_json=$(go mod download -json github.com/smartcontractkit/chainlink-common)
+          common_dir=$(jq -r '.Dir' <<<"$module_json")
+          wrapper="$common_dir/pkg/capabilities/v2/chain-capabilities/evm/server/client_server_gen.go"
+          test -f "$wrapper"
+          info_body=$(sed -n '/func (c \*clientCapability) Info/,/^}/p' "$wrapper")
+          printf '%s\n' "$info_body"
+          grep -q 'NewCapabilityInfo' <<<"$info_body"
+          if grep -q 'SpendTypes' <<<"$info_body"; then
+            echo 'Unexpected SpendTypes found in generated EVM capability Info()' >&2
+            exit 1
+          fi
