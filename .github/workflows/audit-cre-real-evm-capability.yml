@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - audit-cre-real-evm-capability-20260819
+  pull_request:
+    branches:
+      - audit-cre-real-evm-base-20260819
   workflow_dispatch:
 
 permissions:
