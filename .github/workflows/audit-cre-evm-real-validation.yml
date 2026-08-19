@@ -71,10 +71,13 @@ jobs:
           gofmt -w capabilities/chain_capabilities/evm/actions/cre_evm_real_tx_poc_test.go
 
       - name: Confirm generated EVM wrapper advertises no spend types
+        working-directory: capabilities/chain_capabilities/evm
         shell: bash
         run: |
-          info_body=$(sed -n '/func (c \*clientCapability) Info/,/^}/p' \
-            capabilities/chain_capabilities/evm/server/client_server_gen.go)
+          common_dir=$(go list -m -f '{{.Dir}}' github.com/smartcontractkit/chainlink-common)
+          wrapper="$common_dir/pkg/capabilities/v2/chain-capabilities/evm/server/client_server_gen.go"
+          test -f "$wrapper"
+          info_body=$(sed -n '/func (c \*clientCapability) Info/,/^}/p' "$wrapper")
           printf '%s\n' "$info_body"
           grep -q 'NewCapabilityInfo' <<<"$info_body"
           if grep -q 'SpendTypes' <<<"$info_body"; then
