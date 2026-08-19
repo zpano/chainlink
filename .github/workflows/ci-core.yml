@@ -163,7 +163,8 @@ jobs:
     needs: [filter, run-frequency]
     # We don't directly merge dependabot PRs to not waste the resources.
     if:
-      ${{ needs.filter.outputs.affected-modules != '[]' && github.event_name !=
+      ${{ github.repository == 'smartcontractkit/chainlink' &&
+      needs.filter.outputs.affected-modules != '[]' && github.event_name !=
       'merge_group' && github.actor != 'dependabot[bot]' }}
     permissions:
       # To annotate code in the PR.
@@ -310,7 +311,7 @@ jobs:
 
     name: Core Tests (${{ matrix.type.cmd }}) # Be careful modifying the job name, as it is used to fetch the job URL
     # We don't directly merge dependabot PRs, so let's not waste the resources
-    if: ${{ github.actor != 'dependabot[bot]' }}
+    if: ${{ github.repository == 'smartcontractkit/chainlink' && github.actor != 'dependabot[bot]' }}
     needs: [filter, run-frequency]
     timeout-minutes: 60
     # Use ubuntu-latest for jobs that will be skipped
@@ -538,7 +539,7 @@ jobs:
 
   clean:
     name: Clean Go Tidy & Generate
-    if: ${{ github.actor != 'dependabot[bot]' }}
+    if: ${{ github.repository == 'smartcontractkit/chainlink' && github.actor != 'dependabot[bot]' }}
     runs-on: ubuntu22.04-8cores-32GB
     defaults:
       run:
