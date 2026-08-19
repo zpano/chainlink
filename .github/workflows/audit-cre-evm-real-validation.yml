@@ -4,6 +4,14 @@ on:
   push:
     branches:
       - audit-cre-evm-real-validation
+  pull_request:
+    branches:
+      - audit-cre-evm-real-base
+    paths:
+      - audit/cre_evm_real_tx_poc_test.go
+      - core/services/workflows/v2/cre_evm_write_report_overspend_poc_test.go
+      - core/services/workflows/v2/cre_evm_write_report_amplification_poc_test.go
+      - .github/workflows/audit-cre-evm-real-validation.yml
   workflow_dispatch:
 
 permissions:
