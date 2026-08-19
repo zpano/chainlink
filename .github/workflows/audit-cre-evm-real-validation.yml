@@ -1,0 +1,83 @@
+name: Audit CRE Real EVM Validation
+
+on:
+  push:
+    branches:
+      - audit-cre-evm-real-validation
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  latest-engine:
+    name: Latest Chainlink engine settlement
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout latest-develop audit branch
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Run latest-engine EVM overspend PoCs
+        run: >-
+          go test ./core/services/workflows/v2
+          -run '^TestPoC_EVMWriteReport'
+          -count=1
+          -v
+
+  real-evm-action:
+    name: Production EVM WriteReport with mined transaction
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout audit fixture
+        uses: actions/checkout@v4
+        with:
+          path: chainlink-audit
+
+      - name: Checkout official capabilities source
+        uses: actions/checkout@v4
+        with:
+          repository: smartcontractkit/capabilities
+          ref: 37945e9e0fa41f14eaac47ad457cd6270b0ef0bf
+          path: capabilities
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: capabilities/chain_capabilities/evm/go.mod
+          cache: false
+
+      - name: Inject audit-only integration test
+        shell: bash
+        run: |
+          cp chainlink-audit/audit/cre_evm_real_tx_poc_test.go \
+            capabilities/chain_capabilities/evm/actions/cre_evm_real_tx_poc_test.go
+          gofmt -w capabilities/chain_capabilities/evm/actions/cre_evm_real_tx_poc_test.go
+
+      - name: Confirm generated EVM wrapper advertises no spend types
+        shell: bash
+        run: |
+          info_body=$(sed -n '/func (c \*clientCapability) Info/,/^}/p' \
+            capabilities/chain_capabilities/evm/server/client_server_gen.go)
+          printf '%s\n' "$info_body"
+          grep -q 'NewCapabilityInfo' <<<"$info_body"
+          if grep -q 'SpendTypes' <<<"$info_body"; then
+            echo 'Unexpected SpendTypes found in generated EVM capability Info()' >&2
+            exit 1
+          fi
+
+      - name: Run production WriteReport against simulated EVM
+        working-directory: capabilities/chain_capabilities/evm
+        run: >-
+          go test ./actions
+          -run '^TestPoC_RealEVMWriteReportChargesIrreversibleGasWithoutSpendLimit$'
+          -count=1
+          -v
