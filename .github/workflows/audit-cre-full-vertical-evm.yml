@@ -3,7 +3,7 @@ name: Audit CRE Full Vertical Real EVM PoC
 on:
   pull_request:
     branches:
-      - audit-cre-full-vertical-base-20260819
+      - audit-cre-full-vertical-base2-20260819
     paths:
       - core/services/workflows/v2/cre_full_vertical_real_evm_poc_test.go
       - .github/workflows/audit-cre-full-vertical-evm.yml
@@ -70,6 +70,53 @@ jobs:
           test -n "$receiver_bin"
           test -s "$receiver_bin"
           echo "AUDIT_RECEIVER_BIN=$(tr -d '\r\n' < "$receiver_bin")" >> "$GITHUB_ENV"
+
+      - name: Apply compile-only error-variable fix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("core/services/workflows/v2/cre_full_vertical_real_evm_poc_test.go")
+          source = path.read_text()
+          replacements = [
+              (
+                  "\trealEVM, err := evmactions.NewEVM(\n",
+                  "\trealEVM, capErr := evmactions.NewEVM(\n",
+              ),
+              (
+                  "\t)\n\trequire.NoError(t, err)\n\tt.Cleanup(func() { require.NoError(t, realEVM.Close()) })",
+                  "\t)\n\trequire.NoError(t, capErr)\n\tt.Cleanup(func() { require.NoError(t, realEVM.Close()) })",
+              ),
+              (
+                  "\tinfo, err := generated.Info(t.Context())\n\trequire.NoError(t, err)\n",
+                  "\tinfo, infoErr := generated.Info(t.Context())\n\trequire.NoError(t, infoErr)\n",
+              ),
+              (
+                  "\tengine, err := v2.NewEngine(cfg)\n\trequire.NoError(t, err)\n",
+                  "\tengine, engineErr := v2.NewEngine(cfg)\n\trequire.NoError(t, engineErr)\n",
+              ),
+              (
+                  "\tstorage, err := service.backend.StorageAt(t.Context(), receiverAddress, common.Hash{}, nil)\n\trequire.NoError(t, err)\n",
+                  "\tstorage, storageErr := service.backend.StorageAt(t.Context(), receiverAddress, common.Hash{}, nil)\n\trequire.NoError(t, storageErr)\n",
+              ),
+              (
+                  "\ttransmissionInfo, err := forwarderContract.GetTransmissionInfo(\n",
+                  "\ttransmissionInfo, transmissionErr := forwarderContract.GetTransmissionInfo(\n",
+              ),
+              (
+                  "\t)\n\trequire.NoError(t, err)\n\trequire.Equal(t, uint8(1), transmissionInfo.State)",
+                  "\t)\n\trequire.NoError(t, transmissionErr)\n\trequire.Equal(t, uint8(1), transmissionInfo.State)",
+              ),
+          ]
+          for old, new in replacements:
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected one occurrence, found {count}: {old!r}")
+              source = source.replace(old, new, 1)
+          path.write_text(source)
+          PY
+          gofmt -w core/services/workflows/v2/cre_full_vertical_real_evm_poc_test.go
 
       - name: Run full vertical PoC
         run: >-
