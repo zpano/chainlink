@@ -1,0 +1,79 @@
+name: Audit CRE Full Vertical Real EVM PoC
+
+on:
+  pull_request:
+    branches:
+      - audit-cre-full-vertical-base-20260819
+    paths:
+      - core/services/workflows/v2/cre_full_vertical_real_evm_poc_test.go
+      - .github/workflows/audit-cre-full-vertical-evm.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-vertical:
+    name: Engine to real KeystoneForwarder to billing receipt
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout audit merge ref
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Pin official current EVM capability implementation
+        run: >-
+          go get
+          github.com/smartcontractkit/capabilities/chain_capabilities/evm@37945e9e0fa41f14eaac47ad457cd6270b0ef0bf
+
+      - name: Compile audit ERC165 receiver
+        shell: bash
+        run: |
+          cat > /tmp/AuditReceiver.sol <<'SOL'
+          // SPDX-License-Identifier: MIT
+          pragma solidity 0.8.24;
+
+          interface IERC165 {
+            function supportsInterface(bytes4 interfaceId) external view returns (bool);
+          }
+
+          interface IReceiver is IERC165 {
+            function onReport(bytes calldata metadata, bytes calldata report) external;
+          }
+
+          contract AuditReceiver is IReceiver {
+            uint256 public counter;
+            bytes32 public lastReportHash;
+
+            function onReport(bytes calldata metadata, bytes calldata report) external {
+              counter += 1;
+              lastReportHash = keccak256(bytes.concat(metadata, report));
+            }
+
+            function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
+              return interfaceId == type(IReceiver).interfaceId || interfaceId == type(IERC165).interfaceId;
+            }
+          }
+          SOL
+          rm -rf /tmp/audit-receiver-build
+          mkdir -p /tmp/audit-receiver-build
+          npx --yes solc@0.8.24 --bin --abi \
+            --output-dir /tmp/audit-receiver-build \
+            /tmp/AuditReceiver.sol
+          receiver_bin=$(find /tmp/audit-receiver-build -type f -name '*AuditReceiver.bin' -print -quit)
+          test -n "$receiver_bin"
+          test -s "$receiver_bin"
+          echo "AUDIT_RECEIVER_BIN=$(tr -d '\r\n' < "$receiver_bin")" >> "$GITHUB_ENV"
+
+      - name: Run full vertical PoC
+        run: >-
+          go test ./core/services/workflows/v2
+          -run '^TestPoC_FullVerticalRealEVMWriteReportExceedsReservation$'
+          -count=1
+          -v
