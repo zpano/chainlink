@@ -38,8 +38,8 @@ type realTxForwarder struct {
 	chainID *big.Int
 	from    common.Address
 
-	receiver common.Address
-	gasLimit uint64
+	receiver  common.Address
+	gasLimit  uint64
 	submitted bool
 	receipt   *gethtypes.Receipt
 	feeWei    *big.Int
@@ -269,8 +269,8 @@ func TestPoC_RealEVMWriteReportChargesIrreversibleGasWithoutSpendLimit(t *testin
 	require.Equal(t, forwarder.feeWei, balanceDelta,
 		"the transmitter account must irreversibly lose the exact mined transaction fee")
 
-	storage, err := forwarder.backend.StorageAt(t.Context(), forwarder.receiver, common.Hash{}, nil)
-	require.NoError(t, err)
+	storage, storageErr := forwarder.backend.StorageAt(t.Context(), forwarder.receiver, common.Hash{}, nil)
+	require.NoError(t, storageErr)
 	require.Equal(t, int64(1), new(big.Int).SetBytes(storage).Int64(),
 		"the receiver's persistent state must change before billing settlement")
 
