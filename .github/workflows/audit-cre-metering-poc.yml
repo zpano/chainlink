@@ -10,6 +10,8 @@ on:
     paths:
       - core/services/workflows/v2/cre_metering_concurrency_poc_test.go
       - core/services/workflows/v2/cre_evm_write_report_overspend_poc_test.go
+      - core/services/workflows/v2/cre_evm_write_report_amplification_poc_test.go
+      - audit/cre_evm_realcap/**
       - .github/workflows/audit-cre-metering-poc.yml
   workflow_dispatch:
 
@@ -17,7 +19,7 @@ permissions:
   contents: read
 
 jobs:
-  poc:
+  engine-poc:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -30,9 +32,28 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      - name: Run deterministic PoCs
+      - name: Run deterministic engine PoCs
         run: >-
           go test ./core/services/workflows/v2
           -run '^TestPoC_'
           -count=1
           -v
+
+  real-evm-capability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: audit/cre_evm_realcap
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: audit/cre_evm_realcap/go.mod
+          cache: false
+
+      - name: Run against current real EVM capability module
+        run: go test ./... -count=1 -v
