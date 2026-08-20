@@ -40,8 +40,17 @@ jobs:
           -v
 
   real-evm-capability:
+    name: real-evm-capability (${{ matrix.revision }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - revision: chainlink-pinned
+            version: v0.0.0-20260811145308-0de743379654
+          - revision: capabilities-main
+            version: v0.0.0-20260813134635-37945e9e0fa4
     defaults:
       run:
         working-directory: audit/cre_evm_realcap
@@ -55,5 +64,10 @@ jobs:
           go-version-file: audit/cre_evm_realcap/go.mod
           cache: false
 
-      - name: Run against current real EVM capability module
+      - name: Select EVM capability revision
+        run: >-
+          go mod edit
+          -require=github.com/smartcontractkit/capabilities/chain_capabilities/evm@${{ matrix.version }}
+
+      - name: Run real capability and simulated-chain PoCs
         run: go test -mod=mod ./... -count=1 -v
