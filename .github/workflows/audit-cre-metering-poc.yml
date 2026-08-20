@@ -56,4 +56,4 @@ jobs:
           cache: false
 
       - name: Run against current real EVM capability module
-        run: go test ./... -count=1 -v
+        run: go test -mod=mod ./... -count=1 -v
