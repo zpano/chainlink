@@ -193,7 +193,7 @@ func TestRealEVMWriteReportSpendsBeyondSuppliedGasLimitAfterSubmission(t *testin
 	service := newRecordingEVMService(t)
 	lggr := logger.Test(t)
 
-	evmCapability, err := actions.NewEVM(
+	evmCapability, newErr := actions.NewEVM(
 		config.Config{
 			CREForwarderAddress:    "0x1111111111111111111111111111111111111111",
 			ReceiverGasMinimum:     1_000,
@@ -208,7 +208,7 @@ func TestRealEVMWriteReportSpendsBeyondSuppliedGasLimitAfterSubmission(t *testin
 		limits.Factory{Logger: lggr},
 		ts.TransmissionScheduler{},
 	)
-	require.NoError(t, err)
+	require.NoError(t, newErr)
 	t.Cleanup(func() { require.NoError(t, evmCapability.Close()) })
 
 	reportMetadata := ocrtypes.Metadata{
@@ -222,8 +222,8 @@ func TestRealEVMWriteReportSpendsBeyondSuppliedGasLimitAfterSubmission(t *testin
 		WorkflowOwner:    strings.Repeat("44", 20),
 		ReportID:         strings.Repeat("55", 2),
 	}
-	rawReport, err := reportMetadata.Encode()
-	require.NoError(t, err)
+	rawReport, encodeErr := reportMetadata.Encode()
+	require.NoError(t, encodeErr)
 
 	metadata := capabilities.RequestMetadata{
 		WorkflowID:               reportMetadata.WorkflowID,
