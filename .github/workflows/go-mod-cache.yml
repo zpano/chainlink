@@ -51,7 +51,7 @@ jobs:
   go-cache:
     name: Go Cache ${{ matrix.suffix }}
     needs: [filter]
-    if: needs.filter.outputs.changed == 'true'
+    if: needs.filter.outputs.changed == 'true' && github.repository == 'smartcontractkit/chainlink'
 
     strategy:
       fail-fast: false

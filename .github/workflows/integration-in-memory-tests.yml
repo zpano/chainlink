@@ -40,7 +40,10 @@ jobs:
     permissions:
       contents: read
       pull-requests: read # advanced-triggers lists PR files via GitHub API
-    if: github.actor != 'dependabot[bot]' && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+    # This suite depends on SmartContractKit-only runners and credentials. A PR
+    # opened inside a fork cannot fetch its synthetic merge SHA from the upstream
+    # repository and cannot run the downstream private infrastructure jobs.
+    if: github.repository == 'smartcontractkit/chainlink' && github.actor != 'dependabot[bot]' && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
     outputs:
       run-tests: ${{ steps.advanced-triggers.outputs.run-tests }}
     steps:
@@ -101,7 +104,7 @@ jobs:
     # the github context belongs to the *caller*, so event_name is the caller's trigger
     # (e.g. 'schedule' for the nightly) and never 'workflow_call'.
     # Tag pushes stay a no-op, as before.
-    if: always() && github.actor != 'dependabot[bot]' && github.event_name != 'push' && (needs.changes.result == 'skipped' || needs.changes.outputs.run-tests == 'true')
+    if: always() && github.repository == 'smartcontractkit/chainlink' && github.actor != 'dependabot[bot]' && github.event_name != 'push' && (needs.changes.result == 'skipped' || needs.changes.outputs.run-tests == 'true')
     outputs:
       matrix: ${{ steps.define-matrix.outputs.matrix }}
     permissions:

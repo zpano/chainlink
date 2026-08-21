@@ -259,7 +259,7 @@ jobs:
 
   build-chainlink:
     name: Build Chainlink Image ${{ matrix.image.name }}
-    if: github.actor != 'dependabot[bot]'
+    if: github.repository == 'smartcontractkit/chainlink' && github.actor != 'dependabot[bot]'
     environment:
       # http://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/control-deployments#using-environments-without-deployments
       name: integration
@@ -582,6 +582,7 @@ jobs:
     name: Compile CRE & CCIP Tests
     if: >-
       ${{
+        github.repository == 'smartcontractkit/chainlink' &&
         github.actor != 'dependabot[bot]' &&
         (needs.run-core-cre-e2e-tests-setup.outputs.should-run == 'true' ||
          needs.run-ccip-v1-6-e2e-tests-setup.outputs.should-run == 'true')
