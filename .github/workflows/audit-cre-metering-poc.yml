@@ -12,12 +12,19 @@ on:
       - core/services/workflows/v2/cre_evm_write_report_overspend_poc_test.go
       - core/services/workflows/v2/cre_evm_write_report_amplification_poc_test.go
       - core/services/workflows/v2/cre_evm_real_chain_e2e_poc_test.go
+      - core/services/workflows/v2/cre_evm_real_chain_e2e_adapter_poc_test.go
       - audit/cre_evm_realcap/**
       - .github/workflows/audit-cre-metering-poc.yml
   workflow_dispatch:
 
 permissions:
   contents: read
+
+env:
+  # Latest smartcontractkit/chainlink develop commit observed on 2026-08-21.
+  LATEST_CHAINLINK_DEVELOP_SHA: b33f65e7144b72a8fa74371b223ab40b9b34e0b7
+  # Latest smartcontractkit/capabilities main commit observed on 2026-08-21.
+  LATEST_EVM_CAPABILITY_VERSION: v0.0.0-20260820141431-b4c01beffe7d
 
 jobs:
   engine-poc:
@@ -65,6 +72,58 @@ jobs:
           -count=1
           -v
 
+  engine-real-evm-e2e-latest-develop:
+    name: engine-real-evm-e2e (latest develop snapshot)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout latest upstream Chainlink snapshot
+        uses: actions/checkout@v4
+        with:
+          repository: smartcontractkit/chainlink
+          ref: ${{ env.LATEST_CHAINLINK_DEVELOP_SHA }}
+          persist-credentials: false
+
+      - name: Checkout audit source files
+        uses: actions/checkout@v4
+        with:
+          repository: zpano/chainlink
+          ref: audit-cre-metering-concurrency-v259
+          path: audit-source
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            core/services/workflows/v2/cre_evm_real_chain_e2e_poc_test.go
+            core/services/workflows/v2/cre_evm_real_chain_e2e_adapter_poc_test.go
+
+      - name: Overlay audit-only E2E tests onto upstream snapshot
+        shell: bash
+        run: |
+          cp audit-source/core/services/workflows/v2/cre_evm_real_chain_e2e_poc_test.go \
+            core/services/workflows/v2/
+          cp audit-source/core/services/workflows/v2/cre_evm_real_chain_e2e_adapter_poc_test.go \
+            core/services/workflows/v2/
+          rm -rf audit-source
+          test "$(git rev-parse HEAD)" = "${LATEST_CHAINLINK_DEVELOP_SHA}"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Select latest public EVM capability snapshot
+        run: >-
+          go mod edit
+          -require=github.com/smartcontractkit/capabilities/chain_capabilities/evm@${LATEST_EVM_CAPABILITY_VERSION}
+
+      - name: Run full E2E against latest develop snapshot
+        run: >-
+          go test -mod=mod -tags auditcre ./core/services/workflows/v2
+          -run '^TestPoC_EngineRealEVMWriteReportSpendsBeyondReservation$'
+          -count=1
+          -v
+
   real-evm-capability:
     name: real-evm-capability (${{ matrix.revision }})
     runs-on: ubuntu-latest
@@ -75,8 +134,8 @@ jobs:
         include:
           - revision: chainlink-pinned
             version: v0.0.0-20260811145308-0de743379654
-          - revision: capabilities-main
-            version: v0.0.0-20260813134635-37945e9e0fa4
+          - revision: capabilities-latest-snapshot
+            version: v0.0.0-20260820141431-b4c01beffe7d
     defaults:
       run:
         working-directory: audit/cre_evm_realcap
