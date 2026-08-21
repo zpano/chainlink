@@ -11,6 +11,7 @@ on:
       - core/services/workflows/v2/cre_metering_concurrency_poc_test.go
       - core/services/workflows/v2/cre_evm_write_report_overspend_poc_test.go
       - core/services/workflows/v2/cre_evm_write_report_amplification_poc_test.go
+      - core/services/workflows/v2/cre_evm_real_chain_e2e_poc_test.go
       - audit/cre_evm_realcap/**
       - .github/workflows/audit-cre-metering-poc.yml
   workflow_dispatch:
@@ -36,6 +37,31 @@ jobs:
         run: >-
           go test ./core/services/workflows/v2
           -run '^TestPoC_'
+          -count=1
+          -v
+
+  engine-real-evm-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Select Chainlink-pinned EVM capability revision
+        run: >-
+          go mod edit
+          -require=github.com/smartcontractkit/capabilities/chain_capabilities/evm@v0.0.0-20260811145308-0de743379654
+
+      - name: Run Engine to real EVM chain and Billing receipt PoC
+        run: >-
+          go test -mod=mod -tags auditcre ./core/services/workflows/v2
+          -run '^TestPoC_EngineRealEVMWriteReportSpendsBeyondReservation$'
           -count=1
           -v
 
