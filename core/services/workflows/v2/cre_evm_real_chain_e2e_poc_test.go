@@ -31,6 +31,7 @@ import (
 	"github.com/smartcontractkit/capabilities/chain_capabilities/evm/monitoring"
 	"github.com/smartcontractkit/chainlink-common/pkg/capabilities"
 	ocrtypes "github.com/smartcontractkit/chainlink-common/pkg/capabilities/consensus/ocr3/types"
+	caperrors "github.com/smartcontractkit/chainlink-common/pkg/capabilities/errors"
 	evmcap "github.com/smartcontractkit/chainlink-common/pkg/capabilities/v2/chain-capabilities/evm"
 	evmserver "github.com/smartcontractkit/chainlink-common/pkg/capabilities/v2/chain-capabilities/evm/server"
 	"github.com/smartcontractkit/chainlink-common/pkg/logger"
@@ -268,9 +269,20 @@ func (s *e2eSimulatedChainEVMService) recordedFee() *big.Int {
 	return new(big.Int).Set(s.lastFee)
 }
 
+type e2eEVMClientCapability struct {
+	*actions.EVM
+}
+
+// actions.EVM implements the generated client surface except AckEvent, which
+// is only relevant to LogTrigger. This adapter keeps the generated wrapper in
+// the execution path without adding an unrelated trigger dependency.
+func (*e2eEVMClientCapability) AckEvent(context.Context, string, string, string) caperrors.Error {
+	return nil
+}
+
 type e2eExecutableWithInfo struct {
 	capabilities.ExecutableCapability
-	info             capabilities.CapabilityInfo
+	info              capabilities.CapabilityInfo
 	seenSpendLimitsCh chan []capabilities.SpendLimit
 }
 
@@ -349,8 +361,8 @@ func TestPoC_EngineRealEVMWriteReportSpendsBeyondReservation(t *testing.T) {
 	lggr := logger.Test(t)
 	evmCapability, err := actions.NewEVM(
 		evmconfig.Config{
-			CREForwarderAddress:    forwarderAddress.Hex(),
-			ReceiverGasMinimum:     1_000,
+			CREForwarderAddress:     forwarderAddress.Hex(),
+			ReceiverGasMinimum:      1_000,
 			ForwarderLookbackBlocks: 100,
 		},
 		service,
@@ -366,7 +378,7 @@ func TestPoC_EngineRealEVMWriteReportSpendsBeyondReservation(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, evmCapability.Close()) })
 
 	capabilityID := fmt.Sprintf("evm:ChainSelector:%d@1.0.0", e2eChainSelector)
-	generatedServer := evmserver.NewClientServer(evmCapability)
+	generatedServer := evmserver.NewClientServer(&e2eEVMClientCapability{EVM: evmCapability})
 	seenSpendLimitsCh := make(chan []capabilities.SpendLimit, 1)
 	executable := &e2eExecutableWithInfo{
 		ExecutableCapability: generatedServer,
@@ -425,9 +437,9 @@ func TestPoC_EngineRealEVMWriteReportSpendsBeyondReservation(t *testing.T) {
 	cfg.CapRegistry = capreg
 	cfg.BillingClient = billingClient
 	cfg.Hooks = v2.LifecycleHooks{
-		OnInitialized: func(err error) { initDoneCh <- err },
-		OnSubscribedToTriggers: func(ids []string) { subscribedCh <- ids },
-		OnExecutionFinished: func(id string, _ string) { finishedCh <- id },
+		OnInitialized:            func(err error) { initDoneCh <- err },
+		OnSubscribedToTriggers:   func(ids []string) { subscribedCh <- ids },
+		OnExecutionFinished:      func(id string, _ string) { finishedCh <- id },
 	}
 
 	trigger := capmocks.NewTriggerCapability(t)
@@ -556,9 +568,9 @@ func TestPoC_EngineRealEVMWriteReportSpendsBeyondReservation(t *testing.T) {
 	case receipt := <-receiptCh:
 		consumed, ok := new(big.Rat).SetString(receipt.CreditsConsumed)
 		require.True(t, ok, "invalid consumed credits %q", receipt.CreditsConsumed)
-		reserved, ok := new(big.Rat).SetString(reservedCredits)
+		reservedAmount, ok := new(big.Rat).SetString(reservedCredits)
 		require.True(t, ok)
-		require.Greater(t, consumed.Cmp(reserved), 0,
+		require.Greater(t, consumed.Cmp(reservedAmount), 0,
 			"post-facto consumed credits %s must exceed reservation %s",
 			receipt.CreditsConsumed, reservedCredits)
 		t.Logf("engine-to-chain overspend reproduced: reserved=%s consumed=%s feeWei=%s receiverState=(%s,%s) workflowStatus=success",
